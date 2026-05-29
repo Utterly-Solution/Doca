@@ -14,8 +14,15 @@ import {
   ChevronDown,
   History,
   CheckCircle2,
+  User,
+  Calendar,
+  Pill,
+  Heart,
+  Phone,
+  Target,
+  Tag,
 } from 'lucide-react';
-import { DocumentFile, AnalysisFinding, DocumentVersion } from '@/lib/types';
+import { DocumentFile, AnalysisFinding, DocumentVersion, ExtractedMetadata } from '@/lib/types';
 import {
   getDocuments,
   saveDocuments,
@@ -25,6 +32,7 @@ import {
 } from '@/lib/store';
 import { parseDocument } from '@/lib/parse-document';
 import { exportAsTxt, exportAsDocx, exportAsPdf } from '@/lib/export-document';
+import { validateFile } from '@/lib/file-validator';
 
 const ACCEPTED_EXTENSIONS = ['.pdf', '.doc', '.docx', '.txt', '.md'];
 
@@ -45,6 +53,7 @@ function AnalyzerContent() {
   const [isUploading, setIsUploading] = useState(false);
   const [isSummarizing, setIsSummarizing] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [showExportMenu, setShowExportMenu] = useState(false);
@@ -57,21 +66,18 @@ function AnalyzerContent() {
     }
   }, [docId]);
 
-  const callClaude = useCallback(
-    async (mode: 'summary' | 'analysis', text: string): Promise<string> => {
+  const callAI = useCallback(
+    async (mode: 'summary' | 'analysis' | 'extract', text: string): Promise<string> => {
+      const promptMap = {
+        summary: 'Please summarize this document.',
+        analysis: 'Please analyze this document for issues.',
+        extract: 'Please extract key metadata from this document.',
+      };
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [
-            {
-              role: 'user',
-              content:
-                mode === 'summary'
-                  ? 'Please summarize this document.'
-                  : 'Please analyze this document for issues.',
-            },
-          ],
+          messages: [{ role: 'user', content: promptMap[mode] }],
           documentText: text,
           mode,
         }),
@@ -109,17 +115,14 @@ function AnalyzerContent() {
     async (file: File) => {
       setError(null);
 
+      // Validate file (format, size, and security scan)
+      const validation = await validateFile(file);
+      if (!validation.valid) {
+        setError(validation.error || 'File validation failed.');
+        return;
+      }
+
       const ext = '.' + file.name.split('.').pop()?.toLowerCase();
-      if (!ACCEPTED_EXTENSIONS.includes(ext)) {
-        setError(`Unsupported file format. Accepted: ${ACCEPTED_EXTENSIONS.join(', ')}`);
-        return;
-      }
-
-      if (file.size > 10 * 1024 * 1024) {
-        setError('File size exceeds 10 MB limit.');
-        return;
-      }
-
       setIsUploading(true);
 
       try {
@@ -160,7 +163,7 @@ function AnalyzerContent() {
         // Auto-summarize
         setIsSummarizing(true);
         try {
-          const summary = await callClaude('summary', content);
+          const summary = await callAI('summary', content);
           newDoc.summary = summary;
           updateDocument(newDoc);
           setDocument({ ...newDoc });
@@ -178,7 +181,7 @@ function AnalyzerContent() {
         // Auto-analyze
         setIsAnalyzing(true);
         try {
-          const analysisRaw = await callClaude('analysis', content);
+          const analysisRaw = await callAI('analysis', content);
           let analysis: AnalysisFinding[] = [];
           try {
             const cleaned = analysisRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
@@ -205,12 +208,32 @@ function AnalyzerContent() {
           console.error('Analysis failed:', err);
         }
         setIsAnalyzing(false);
+
+        // Auto-extract metadata
+        setIsExtracting(true);
+        try {
+          const extractRaw = await callAI('extract', content);
+          const cleaned = extractRaw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+          const metadata: ExtractedMetadata = JSON.parse(cleaned);
+          newDoc.extractedMetadata = metadata;
+          updateDocument(newDoc);
+          setDocument({ ...newDoc });
+          addAuditEntry({
+            action: 'extract_metadata',
+            resourceType: 'document',
+            resourceId: newDoc.id,
+            details: `Key information extracted for: ${file.name}`,
+          });
+        } catch (err) {
+          console.error('Extraction failed:', err);
+        }
+        setIsExtracting(false);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Upload failed');
         setIsUploading(false);
       }
     },
-    [callClaude]
+    [callAI]
   );
 
   const handleDrop = useCallback(
@@ -238,7 +261,6 @@ function AnalyzerContent() {
       content: version.content,
       currentVersionIndex: index,
     };
-    // Create a new version entry for the rollback
     updated.versions.push({
       id: crypto.randomUUID(),
       content: version.content,
@@ -353,6 +375,8 @@ function AnalyzerContent() {
     );
   }
 
+  const meta = document.extractedMetadata;
+
   // Document loaded — show analysis workspace
   return (
     <div className="p-4 sm:p-6">
@@ -370,7 +394,6 @@ function AnalyzerContent() {
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
-          {/* Version History */}
           <button
             onClick={() => setShowVersionHistory(!showVersionHistory)}
             className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
@@ -381,7 +404,6 @@ function AnalyzerContent() {
             ({document.versions.length})
           </button>
 
-          {/* Export */}
           <div className="relative">
             <button
               onClick={() => setShowExportMenu(!showExportMenu)}
@@ -415,7 +437,6 @@ function AnalyzerContent() {
             )}
           </div>
 
-          {/* New Upload */}
           <label className="flex items-center gap-1.5 px-3 py-2 text-xs sm:text-sm border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors cursor-pointer">
             <Upload className="w-4 h-4" />
             <span className="hidden sm:inline">New Upload</span>
@@ -473,100 +494,196 @@ function AnalyzerContent() {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
-        {(['summary', 'analysis', 'content'] as const).map((tab) => (
-          <button
-            key={tab}
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
-              activeTab === tab
-                ? 'bg-white text-gray-900 shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-      </div>
+      {/* Main content with sidebar */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        {/* Left: Tabs and content */}
+        <div className="flex-1 min-w-0">
+          {/* Tabs */}
+          <div className="flex gap-1 mb-6 bg-gray-100 rounded-lg p-1 w-fit">
+            {(['summary', 'analysis', 'content'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={`px-4 py-2 text-sm font-medium rounded-md transition-colors ${
+                  activeTab === tab
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                {tab.charAt(0).toUpperCase() + tab.slice(1)}
+              </button>
+            ))}
+          </div>
 
-      {/* Tab Content */}
-      {activeTab === 'summary' && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Document Summary</h3>
-          {isSummarizing ? (
-            <div className="flex items-center gap-3 text-gray-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Generating summary with AI...
-            </div>
-          ) : document.summary ? (
-            <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
-              {document.summary}
-            </p>
-          ) : (
-            <p className="text-gray-400 italic">No summary available.</p>
-          )}
-        </div>
-      )}
-
-      {activeTab === 'analysis' && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-4">Smart Analysis</h3>
-          {isAnalyzing ? (
-            <div className="flex items-center gap-3 text-gray-500">
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Analyzing document for issues...
-            </div>
-          ) : document.analysis && document.analysis.length > 0 ? (
-            <div className="space-y-3">
-              {/* Summary badges */}
-              <div className="flex gap-3 mb-4">
-                {['Critical', 'Warning', 'Info'].map((sev) => {
-                  const count = document.analysis!.filter((f) => f.severity === sev).length;
-                  if (count === 0) return null;
-                  return (
-                    <span
-                      key={sev}
-                      className={`px-3 py-1 rounded-full text-xs font-medium border ${severityBg(sev)}`}
-                    >
-                      {count} {sev}
-                    </span>
-                  );
-                })}
-              </div>
-
-              {document.analysis.map((finding, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-3 p-4 rounded-lg border ${severityBg(finding.severity)}`}
-                >
-                  {severityIcon(finding.severity)}
-                  <div>
-                    <span className="text-xs font-semibold uppercase tracking-wide">
-                      {finding.section}
-                    </span>
-                    <p className="text-sm mt-0.5">{finding.description}</p>
-                  </div>
+          {activeTab === 'summary' && (
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Document Summary</h3>
+              {isSummarizing ? (
+                <div className="flex items-center gap-3 text-gray-500">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Generating summary with AI...
                 </div>
-              ))}
+              ) : document.summary ? (
+                <p className="text-gray-700 leading-relaxed whitespace-pre-wrap">
+                  {document.summary}
+                </p>
+              ) : (
+                <p className="text-gray-400 italic">No summary available.</p>
+              )}
             </div>
-          ) : (
-            <div className="flex items-center gap-2 text-green-600">
-              <CheckCircle2 className="w-5 h-5" />
-              No issues found. Document looks good!
+          )}
+
+          {activeTab === 'analysis' && (
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+              <h3 className="font-semibold text-gray-900 mb-4">Smart Analysis</h3>
+              {isAnalyzing ? (
+                <div className="flex items-center gap-3 text-gray-500">
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                  Analyzing document for issues...
+                </div>
+              ) : document.analysis && document.analysis.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex gap-3 mb-4">
+                    {['Critical', 'Warning', 'Info'].map((sev) => {
+                      const count = document.analysis!.filter((f) => f.severity === sev).length;
+                      if (count === 0) return null;
+                      return (
+                        <span
+                          key={sev}
+                          className={`px-3 py-1 rounded-full text-xs font-medium border ${severityBg(sev)}`}
+                        >
+                          {count} {sev}
+                        </span>
+                      );
+                    })}
+                  </div>
+
+                  {document.analysis.map((finding, i) => (
+                    <div
+                      key={i}
+                      className={`flex items-start gap-3 p-4 rounded-lg border ${severityBg(finding.severity)}`}
+                    >
+                      {severityIcon(finding.severity)}
+                      <div>
+                        <span className="text-xs font-semibold uppercase tracking-wide">
+                          {finding.section}
+                        </span>
+                        <p className="text-sm mt-0.5">{finding.description}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 text-green-600">
+                  <CheckCircle2 className="w-5 h-5" />
+                  No issues found. Document looks good!
+                </div>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'content' && (
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+              <h3 className="font-semibold text-gray-900 mb-3">Document Content</h3>
+              <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-mono bg-gray-50 p-4 rounded-lg max-h-[600px] overflow-y-auto">
+                {document.versions[document.currentVersionIndex]?.content || document.content}
+              </div>
             </div>
           )}
         </div>
-      )}
 
-      {activeTab === 'content' && (
-        <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-6">
-          <h3 className="font-semibold text-gray-900 mb-3">Document Content</h3>
-          <div className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-mono bg-gray-50 p-4 rounded-lg max-h-[600px] overflow-y-auto">
-            {document.versions[document.currentVersionIndex]?.content || document.content}
+        {/* Right: Key Information Sidebar */}
+        <div className="w-full lg:w-80 flex-shrink-0">
+          <div className="bg-white border border-gray-200 rounded-xl shadow-sm p-5 sticky top-4">
+            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
+              <Tag className="w-4 h-4 text-blue-600" />
+              Key Information
+            </h3>
+
+            {isExtracting ? (
+              <div className="flex items-center gap-3 text-gray-500 text-sm">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Extracting key information...
+              </div>
+            ) : meta ? (
+              <div className="space-y-4">
+                {meta.documentType && (
+                  <MetadataField icon={<FileText className="w-3.5 h-3.5" />} label="Document Type" value={meta.documentType} />
+                )}
+                {meta.patientName && (
+                  <MetadataField icon={<User className="w-3.5 h-3.5" />} label="Patient Name" value={meta.patientName} />
+                )}
+                {meta.dateOfBirth && (
+                  <MetadataField icon={<Calendar className="w-3.5 h-3.5" />} label="Date of Birth" value={meta.dateOfBirth} />
+                )}
+                {meta.caregiverName && (
+                  <MetadataField icon={<User className="w-3.5 h-3.5" />} label="Caregiver" value={meta.caregiverName} />
+                )}
+                {meta.serviceDates && (
+                  <MetadataField icon={<Calendar className="w-3.5 h-3.5" />} label="Service Dates" value={meta.serviceDates} />
+                )}
+                {meta.medications && meta.medications.length > 0 && (
+                  <MetadataList icon={<Pill className="w-3.5 h-3.5" />} label="Medications" items={meta.medications} />
+                )}
+                {meta.allergies && meta.allergies.length > 0 && (
+                  <MetadataList icon={<Heart className="w-3.5 h-3.5" />} label="Allergies" items={meta.allergies} color="text-red-600 bg-red-50" />
+                )}
+                {meta.emergencyContacts && meta.emergencyContacts.length > 0 && (
+                  <MetadataList icon={<Phone className="w-3.5 h-3.5" />} label="Emergency Contacts" items={meta.emergencyContacts} />
+                )}
+                {meta.carePlanGoals && meta.carePlanGoals.length > 0 && (
+                  <MetadataList icon={<Target className="w-3.5 h-3.5" />} label="Care Plan Goals" items={meta.carePlanGoals} />
+                )}
+                {meta.otherFields && Object.keys(meta.otherFields).length > 0 && (
+                  <div>
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Other Details</p>
+                    <div className="space-y-1.5">
+                      {Object.entries(meta.otherFields).map(([key, value]) => (
+                        <div key={key} className="text-sm">
+                          <span className="font-medium text-gray-700">{key}:</span>{' '}
+                          <span className="text-gray-600">{value}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-gray-400 italic">No metadata extracted yet.</p>
+            )}
           </div>
         </div>
-      )}
+      </div>
+    </div>
+  );
+}
+
+function MetadataField({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">
+        {icon}
+        {label}
+      </div>
+      <p className="text-sm text-gray-900">{value}</p>
+    </div>
+  );
+}
+
+function MetadataList({ icon, label, items, color }: { icon: React.ReactNode; label: string; items: string[]; color?: string }) {
+  return (
+    <div>
+      <div className="flex items-center gap-1.5 text-xs font-medium text-gray-500 uppercase tracking-wide mb-1.5">
+        {icon}
+        {label}
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {items.map((item, i) => (
+          <span key={i} className={`text-xs px-2 py-1 rounded-md ${color || 'text-gray-700 bg-gray-100'}`}>
+            {item}
+          </span>
+        ))}
+      </div>
     </div>
   );
 }

@@ -282,6 +282,28 @@ export default function ChatbotPage() {
     updateSession(updatedSession);
   };
 
+  const renderWithCitations = (text: string) => {
+    // Match [Source: ...] patterns
+    const parts = text.split(/(\[Source:\s*[^\]]+\])/gi);
+    if (parts.length === 1) return text;
+    return parts.map((part, i) => {
+      if (/^\[Source:\s*[^\]]+\]$/i.test(part)) {
+        const citation = part.slice(1, -1); // Remove brackets
+        return (
+          <span
+            key={i}
+            className="inline-flex items-center gap-0.5 px-1.5 py-0.5 mx-0.5 bg-blue-50 text-blue-700 text-xs rounded-md border border-blue-200 cursor-default"
+            title={citation}
+          >
+            <FileText className="w-3 h-3" />
+            {citation.replace(/^Source:\s*/i, '')}
+          </span>
+        );
+      }
+      return part;
+    });
+  };
+
   return (
     <div className="flex h-[calc(100vh-120px)] relative">
       {/* Mobile overlay for session sidebar */}
@@ -492,7 +514,9 @@ export default function ChatbotPage() {
                       )}
                     </div>
                   ) : (
-                    <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+                    <div className="text-sm whitespace-pre-wrap">
+                      {message.role === 'assistant' ? renderWithCitations(message.content) : message.content}
+                    </div>
                   )}
 
                   <p

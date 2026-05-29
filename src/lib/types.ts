@@ -1,3 +1,16 @@
+export interface ExtractedMetadata {
+  patientName?: string;
+  dateOfBirth?: string;
+  caregiverName?: string;
+  serviceDates?: string;
+  medications?: string[];
+  allergies?: string[];
+  emergencyContacts?: string[];
+  carePlanGoals?: string[];
+  documentType?: string;
+  otherFields?: Record<string, string>;
+}
+
 export interface DocumentFile {
   id: string;
   name: string;
@@ -7,6 +20,7 @@ export interface DocumentFile {
   uploadDate: string;
   summary?: string;
   analysis?: AnalysisFinding[];
+  extractedMetadata?: ExtractedMetadata;
   versions: DocumentVersion[];
   currentVersionIndex: number;
 }
@@ -49,7 +63,7 @@ export interface ChatSession {
   updatedAt: string;
 }
 
-export type ChatMode = 'qa' | 'summary' | 'analysis' | 'edit';
+export type ChatMode = 'qa' | 'summary' | 'analysis' | 'edit' | 'extract';
 
 export interface QAPair {
   id: string;

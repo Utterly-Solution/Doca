@@ -3,6 +3,7 @@ import Anthropic from '@anthropic-ai/sdk';
 import Groq from 'groq-sdk';
 import { getSystemPrompt } from '@/lib/prompts';
 import { ChatMode } from '@/lib/types';
+import { checkRateLimit, RATE_LIMITS } from '@/lib/rate-limiter';
 
 const provider = process.env.AI_PROVIDER || 'groq';
 
@@ -15,6 +16,22 @@ function getGroqClient() {
 }
 
 export async function POST(req: NextRequest) {
+  // Rate limiting
+  const clientIp = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  const rateCheck = checkRateLimit(`api:${clientIp}`, RATE_LIMITS.api);
+  if (!rateCheck.allowed) {
+    return new Response(
+      JSON.stringify({ error: 'Too many requests. Please try again later.' }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(Math.ceil((rateCheck.resetAt - Date.now()) / 1000)),
+        },
+      }
+    );
+  }
+
   try {
     const { messages, documentText, mode, qaPairs } = (await req.json()) as {
       messages: { role: 'user' | 'assistant'; content: string }[];

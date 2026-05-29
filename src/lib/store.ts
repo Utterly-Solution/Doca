@@ -1,4 +1,5 @@
 import { DocumentFile, ChatSession, QAPair, AuditLogEntry, User } from './types';
+import { getCurrentUser } from './auth';
 
 const STORAGE_KEYS = {
   DOCUMENTS: 'doca_documents',
@@ -22,13 +23,12 @@ function setItem<T>(key: string, value: T): void {
   localStorage.setItem(key, JSON.stringify(value));
 }
 
-// Current user (static for Phase 1)
-export const currentUser: User = {
-  id: 'user-001',
-  name: 'Sarah Johnson',
-  email: 'sarah.johnson@homecare.agency',
-  role: 'Administrator',
-};
+// Get current authenticated user
+export function currentUser(): User {
+  const user = getCurrentUser();
+  if (user) return user;
+  return { id: 'unknown', name: 'Unknown', email: '', role: 'Caregiver' };
+}
 
 // Documents
 export function getDocuments(): DocumentFile[] {
@@ -100,12 +100,28 @@ export function getAuditLog(): AuditLogEntry[] {
   return getItem<AuditLogEntry[]>(STORAGE_KEYS.AUDIT_LOG, []);
 }
 
+// Basic PHI redaction patterns for audit log details
+function redactPHI(text: string): string {
+  return text
+    // SSN patterns
+    .replace(/\b\d{3}-\d{2}-\d{4}\b/g, '[SSN REDACTED]')
+    // Phone patterns
+    .replace(/\b\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g, '[PHONE REDACTED]')
+    // Email in content (not user emails in action context)
+    .replace(/\b[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\b/g, '[EMAIL REDACTED]')
+    // Date of birth patterns
+    .replace(/\b(DOB|Date of Birth|D\.O\.B\.?)\s*:?\s*\d{1,2}[/-]\d{1,2}[/-]\d{2,4}/gi, '[DOB REDACTED]')
+    // MRN / Medical Record Numbers
+    .replace(/\b(MRN|Medical Record)\s*#?\s*:?\s*\d+/gi, '[MRN REDACTED]');
+}
+
 export function addAuditEntry(entry: Omit<AuditLogEntry, 'id' | 'timestamp' | 'userId'>): void {
   const log = getAuditLog();
   log.unshift({
     ...entry,
+    details: redactPHI(entry.details),
     id: crypto.randomUUID(),
-    userId: currentUser.id,
+    userId: currentUser().id,
     timestamp: new Date().toISOString(),
   });
   // Keep last 500 entries

@@ -2,28 +2,28 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard,
-  FolderOpen,
   FileSearch,
   MessageSquare,
-  BookOpen,
   User,
   Menu,
   X,
+  LogOut,
 } from 'lucide-react';
+import { useAuth } from './AuthProvider';
 
 const navItems = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Document Library', href: '/documents', icon: FolderOpen },
-  { label: 'Document Analyzer', href: '/analyzer', icon: FileSearch },
-  { label: 'Knowledge Base', href: '/knowledge-base', icon: BookOpen },
-  { label: 'Chatbot', href: '/chatbot', icon: MessageSquare },
+  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, adminOnly: true },
+  { label: 'Document Analyzer', href: '/analyzer', icon: FileSearch, adminOnly: false },
+  { label: 'Chatbot', href: '/chatbot', icon: MessageSquare, adminOnly: false },
 ];
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const router = useRouter();
+  const { user, logout } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   // Close mobile sidebar on route change
@@ -40,6 +40,11 @@ export default function Sidebar() {
     }
     return () => { document.body.style.overflow = ''; };
   }, [mobileOpen]);
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
+  };
 
   const sidebarContent = (
     <>
@@ -61,7 +66,7 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-        {navItems.map((item) => {
+        {navItems.filter((item) => !item.adminOnly || user?.role === 'Administrator').map((item) => {
           const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
           const Icon = item.icon;
           return (
@@ -86,10 +91,17 @@ export default function Sidebar() {
           <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center flex-shrink-0">
             <User className="w-4 h-4" />
           </div>
-          <div>
-            <p className="text-sm font-medium">Sarah Johnson</p>
-            <p className="text-xs text-gray-400">Administrator</p>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium truncate">{user?.name || 'Unknown'}</p>
+            <p className="text-xs text-gray-400 truncate">{user?.role || ''}</p>
           </div>
+          <button
+            onClick={handleLogout}
+            className="p-1.5 text-gray-400 hover:text-red-400 transition-colors rounded-lg hover:bg-white/5"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
         </div>
       </div>
     </>
