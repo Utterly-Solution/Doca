@@ -58,7 +58,7 @@ export default function Sidebar() {
         </div>
         <button
           onClick={() => setMobileOpen(false)}
-          className="lg:hidden p-1 text-gray-400 hover:text-white"
+          className="lg:hidden p-1 text-white hover:text-white"
         >
           <X className="w-5 h-5" />
         </button>
@@ -74,9 +74,9 @@ export default function Sidebar() {
               key={item.href}
               href={item.href}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive
-                ? 'bg-blue-600/20 text-blue-400'
-                : 'text-gray-300 hover:bg-white/5 hover:text-white'
-              }`}
+                ? 'bg-blue-600/20 text-white'
+                : 'text-white hover:bg-white/5 hover:text-white'
+                }`}
             >
               <Icon className="w-5 h-5" />
               {item.label}
@@ -93,11 +93,11 @@ export default function Sidebar() {
           </div>
           <div className="flex-1 min-w-0">
             <p className="text-sm font-medium truncate">{user?.name || 'Unknown'}</p>
-            <p className="text-xs text-gray-400 truncate">{user?.role || ''}</p>
+            <p className="text-xs text-white truncate">{user?.role || ''}</p>
           </div>
           <button
             onClick={handleLogout}
-            className="p-1.5 text-gray-400 hover:text-red-400 transition-colors rounded-lg hover:bg-white/5"
+            className="p-1.5 text-white hover:text-white transition-colors rounded-lg hover:bg-white/5"
             title="Sign Out"
           >
             <LogOut className="w-4 h-4" />
@@ -128,9 +128,8 @@ export default function Sidebar() {
 
       {/* Mobile sidebar */}
       <aside
-        className={`lg:hidden fixed left-0 top-0 h-screen w-64 bg-[#0F172A] text-white flex flex-col z-50 transform transition-transform duration-200 ${
-          mobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={`lg:hidden fixed left-0 top-0 h-screen w-64 bg-[#0F172A] text-white flex flex-col z-50 transform transition-transform duration-200 ${mobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
       >
         {sidebarContent}
       </aside>

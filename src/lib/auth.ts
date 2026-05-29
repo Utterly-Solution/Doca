@@ -20,15 +20,15 @@ const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const DEFAULT_USERS: (User & { password: string })[] = [
   {
     id: 'user-001',
-    name: 'Haris',
-    email: 'm.haris@homecare.agency',
+    name: 'Sarrah',
+    email: 'sarrah@homecare.agency',
     role: 'Administrator',
     password: 'Admin@123',
   },
   {
     id: 'user-002',
-    name: 'Dr. Fazool',
-    email: 'fazool@homecare.agency',
+    name: 'Nathaniil',
+    email: 'nathaniil@homecare.agency',
     role: 'Nurse',
     password: 'Nurse@123',
   },
