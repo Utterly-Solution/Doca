@@ -20,8 +20,8 @@ const INACTIVITY_TIMEOUT_MS = 20 * 60 * 1000; // 20 minutes
 const DEFAULT_USERS: (User & { password: string })[] = [
   {
     id: 'user-001',
-    name: 'Sarrah',
-    email: 'sarrah@homecare.agency',
+    name: 'Sarah',
+    email: 'sarah@homecare.agency',
     role: 'Administrator',
     password: 'Admin@123',
   },
@@ -56,14 +56,11 @@ function removeItem(key: string): void {
 
 // Seed default users if not present
 export function seedUsers(): void {
-  const existing = getItem<(User & { password: string })[]>(STORAGE_KEYS.USERS, []);
-  if (existing.length === 0) {
-    setItem(STORAGE_KEYS.USERS, DEFAULT_USERS);
-  }
+  // No-op: we now use DEFAULT_USERS directly
 }
 
 export function authenticate(email: string, password: string): { user: User; session: AuthSession } | null {
-  const users = getItem<(User & { password: string })[]>(STORAGE_KEYS.USERS, []);
+  const users = DEFAULT_USERS;
   const found = users.find((u) => u.email.toLowerCase() === email.toLowerCase() && u.password === password);
   if (!found) return null;
 
@@ -109,7 +106,7 @@ export function getCurrentUser(): User | null {
   const session = getCurrentSession();
   if (!session) return null;
 
-  const users = getItem<(User & { password: string })[]>(STORAGE_KEYS.USERS, []);
+  const users = DEFAULT_USERS;
   const found = users.find((u) => u.id === session.userId);
   if (!found) return null;
 

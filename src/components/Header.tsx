@@ -1,7 +1,7 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { AlertTriangle } from 'lucide-react';
+
 
 const pageNames: Record<string, { title: string; description: string }> = {
   '/dashboard': { title: 'Dashboard', description: 'AI Command Center' },
